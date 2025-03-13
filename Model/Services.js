@@ -10,7 +10,7 @@ const servicesOperation = {
 
         try {
           // First insert the service
-          const serviceQuery = `INSERT INTO Services (provider_id, service_name, description, price, 
+          const serviceQuery = `INSERT INTO services (provider_id, service_name, description, price, 
                                category_id, location ) 
                                VALUES (?, ?, ?, ?, ?, ?)`;
           
@@ -35,7 +35,7 @@ const servicesOperation = {
 
           // If there are images, insert them
           if (images.length > 0) {
-            const imageQuery = `INSERT INTO ServiceImages (service_id, image_url) VALUES ?`;
+            const imageQuery = `INSERT INTO serviceimages (service_id, image_url) VALUES ?`;
             const imageValues = images.map(image => [serviceResult.insertId, image]);
             
             await new Promise((resolve, reject) => {
@@ -78,8 +78,8 @@ const servicesOperation = {
             GROUP_CONCAT(si.image_url) AS images,
             COUNT(r.review_id) AS review_count, -- Number of reviews
             IFNULL(AVG(r.rating), 0) AS average_rating -- Average rating, defaults to 0 if no reviews
-        FROM Services s
-        LEFT JOIN ServiceImages si ON s.service_id = si.service_id
+        FROM  services s
+        LEFT JOIN serviceimages si ON s.service_id = si.service_id
         LEFT JOIN categories c ON s.category_id = c.category_id
         LEFT JOIN users u ON s.provider_id = u.user_id
         LEFT JOIN reviews r ON s.service_id = r.service_id -- Join with reviews table
@@ -122,8 +122,8 @@ const servicesOperation = {
     cu.phone AS customer_phone,
     cu.email AS customer_email,
     cu.address AS customer_address
-FROM Services s
-LEFT JOIN ServiceImages si ON s.service_id = si.service_id
+FROM services s
+LEFT JOIN serviceimages si ON s.service_id = si.service_id
 LEFT JOIN categories c ON s.category_id = c.category_id
 LEFT JOIN users u ON s.provider_id = u.user_id
 LEFT JOIN bookings b ON s.service_id = b.service_id
@@ -164,7 +164,7 @@ WHERE s.service_id = ?;
 
         try {
           // Update service details
-          const serviceQuery = `UPDATE Services 
+          const serviceQuery = `UPDATE services 
                                SET provider_id = ?, service_name = ?, description = ?, 
                                    price = ?, category_id = ?, location = ?, availability = ?
                                WHERE service_id = ?`;
@@ -193,14 +193,14 @@ WHERE s.service_id = ?;
           if (images.length > 0) {
             // Delete existing images
             await new Promise((resolve, reject) => {
-              connection.query('DELETE FROM ServiceImages WHERE service_id = ?', [serviceId], (err, results) => {
+              connection.query('DELETE FROM serviceimages WHERE service_id = ?', [serviceId], (err, results) => {
                 if (err) reject(err);
                 else resolve(results);
               });
             });
 
             // Insert new images
-            const imageQuery = `INSERT INTO ServiceImages (service_id, image_url) VALUES ?`;
+            const imageQuery = `INSERT INTO serviceimages (service_id, image_url) VALUES ?`;
             const imageValues = images.map(image => [serviceId, image]);
             
             await new Promise((resolve, reject) => {
@@ -237,13 +237,13 @@ WHERE s.service_id = ?;
           if (err) return reject(err);
           try {
               await new Promise((resolve, reject) => {
-                  connection.query('DELETE FROM ServiceImages WHERE service_id = ?', [serviceId], (err, results) => {
+                  connection.query('DELETE FROM serviceImages WHERE service_id = ?', [serviceId], (err, results) => {
                       if (err) reject(err);
                       else resolve(results);
                   });
               });
               await new Promise((resolve, reject) => {
-                  connection.query('DELETE FROM Services WHERE service_id = ?', [serviceId], (err, results) => {
+                  connection.query('DELETE FROM services WHERE service_id = ?', [serviceId], (err, results) => {
                       if (err) reject(err);
                       else resolve(results);
                   });
@@ -271,7 +271,7 @@ WHERE s.service_id = ?;
                u.address as provider_address,
                GROUP_CONCAT(si.image_url) as images
         FROM Services s
-        LEFT JOIN ServiceImages si ON s.service_id = si.service_id
+        LEFT JOIN serviceimages si ON s.service_id = si.service_id
         LEFT JOIN categories c ON s.category_id = c.category_id
         LEFT JOIN users u ON s.provider_id = u.user_id
         WHERE s.provider_id = ?

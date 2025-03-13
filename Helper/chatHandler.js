@@ -1,4 +1,5 @@
 const Message = require('../Model/Message'); // Assuming you have a Message model
+const messageOperation = require('../Model/Message');
 
 function setupChatHandlers(io) {
     io.on('connection', (socket) => {
@@ -16,12 +17,7 @@ function setupChatHandlers(io) {
                 const { sender, receiver, content, roomId } = messageData;
                 
                 // Save message to database
-                const newMessage = await Message.create({
-                    sender,
-                    receiver,
-                    content,
-                    roomId
-                });
+                const newMessage = await messageOperation.sendMessage(roomId, sender, receiver, content);
 
                 // Broadcast message to room
                 io.to(roomId).emit('receive_message', newMessage);

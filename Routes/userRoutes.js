@@ -35,33 +35,36 @@ router.get('/single-user/:userId', async (req, res) => {
     res.status(500).json({ message: 'Error fetching user', error: error.message });
   }
 });
-
-
-// POST create new user
 router.post('/create-user', async (req, res) => {
   try {
     console.log('Request body:', req.body);
-    const { email, password, userType } = req.body;
+    const { email, password} = req.body;
 
     // Basic validation
     if (!email || !password) {
-      return res.status(400).json({ message: 'Required fields missing' });
+      return res.status(399).json({ message: 'Required fields missing' });
+    }
+
+    // Check if the email already exists
+    const existingUser = await userOperations.checkIfEmailExists(email);
+    if (existingUser) {
+      return res.status(399).json({ message: 'Email already exists' });
     }
 
     // Hash password
-    const hashedPassword = await bcrypt.hash(password, 10);
+    const hashedPassword = await bcrypt.hash(password, 9);
 
     const userData = {
       email,
       password: hashedPassword,
-      name: email.split('@')[0],
-      userType: userType || 'customer' // Default to customer if not specified
+      name: email.split('@')[-1],  // Set default name based on email
+      // userType: userType || 'customer'  // Default to 'customer' if not specified
     };
 
     const result = await userOperations.createUser(userData);
     
     // Return more detailed response
-    res.status(201).json({ 
+    res.status(200).json({ 
       success: true,
       message: 'Registration successful! Please complete your profile.',
       userId: result.insertId,
@@ -69,20 +72,64 @@ router.post('/create-user', async (req, res) => {
       requiresProfileCompletion: true
     });
   } catch (error) {
-    res.status(500).json({ message: 'Error creating user', error: error.message });
+    console.error('Error creating user:', error);  // Log error for debugging
+    // Send a more detailed error message
+    res.status(499).json({
+      message: 'Error creating user',
+      error: error.message || 'An unexpected error occurred'
+    });
   }
 });
+
+
+
+// router.post('/create-user', async (req, res) => {
+//   try {
+//     console.log('Request body:', req.body);
+//     const { email, password} = req.body;
+
+//     // Basic validation
+//     if (!email || !password) {
+//       return res.status(400).json({ message: 'Required fields missing' });
+//     }
+
+//     // Hash password
+//     const hashedPassword = await bcrypt.hash(password, 10);
+
+//     const userData = {
+//       email,
+//       password: hashedPassword,
+//       name: email.split('@')[0],
+//       // userType: userType || 'customer' // Default to customer if not specified
+//     };
+
+//     const result = await userOperations.createUser(userData);
+    
+//     // Return more detailed response
+//     res.status(201).json({ 
+//       success: true,
+//       message: 'Registration successful! Please complete your profile.',
+//       userId: result.insertId,
+//       profileComplete: false,
+//       requiresProfileCompletion: true
+//     });
+//   } catch (error) {
+//     res.status(500).json({ message: 'Error creating user', error: error.message });
+//   }
+// });
 
 // PUT update user profile
 router.put('/complete-profile/:userId', async (req, res) => {
   try {
     const userId = req.params.userId;
-    console.log('mzigo unaokuja ni ', req.body)
-    const { name, phone, address, profile_picture, skills, experience, userType } = req.body;
-    
+    console.log('Mzigo unaokuja:', req.body);
+
+    const { name, phone = '', address = '', profile_picture = 'default.jpg', skills = [], experience = 0, userType = 'Customer' } = req.body;
+
     // Check if user exists
     const existingUser = await userOperations.getUserById(userId);
-    console.log('user id ni ', existingUser)
+    console.log('User ID ni:', existingUser);
+
     if (!existingUser) {
       return res.status(404).json({ message: 'User not found' });
     }
@@ -94,27 +141,32 @@ router.put('/complete-profile/:userId', async (req, res) => {
 
     const userData = {
       name,
-      phone,
-      address,
-      profile_picture,
-      skills,
-      experience,
-      userType,
-      profile_completed: true // Add a flag to indicate profile completion
+      phone: phone || existingUser.phone,
+      address: address || existingUser.address,
+      profile_picture: profile_picture || existingUser.profile_picture,
+      skills: skills.length ? JSON.stringify(skills) : existingUser.skills, // Save skills as JSON string
+      experience: experience || existingUser.experience,
+      userType: userType || existingUser.userType,
+      profile_completed: 1 // Use `1` instead of `true` for MySQL
     };
 
+    console.log('Updated Data:', userData);
+
+    // Update user
     await userOperations.updateUser(userId, userData);
-    
+
     // Get updated user data
     const updatedUser = await userOperations.getUserById(userId);
-    
+
     res.json({ 
       success: true,
       message: 'Profile completed successfully',
       profileComplete: true,
       user: updatedUser
     });
+
   } catch (error) {
+    console.error('Error updating profile:', error);
     res.status(500).json({ message: 'Error updating profile', error: error.message });
   }
 });
@@ -285,7 +337,7 @@ router.post('/login', async (req, res) => {
 
 router.post('/google-login', async (req, res) => {
   try {
-    const user = await  userOperations.getUserById(req.body.email);
+    const user = await userOperations.getUserByEmail(req.body.email); // Ensure this function exists
     if (user) {
       const token = JWT.sign({ _id: user._id }, process.env.JWT_SECRET, {
         expiresIn: "1d",
@@ -328,7 +380,7 @@ router.post('/google-login', async (req, res) => {
     }
   } catch (error) {
     console.error(error);
-    res.status(500).send({
+    res.status(500).send({ 
       success: false,
       message: "Kuna tatizo tafadhali rudia tena",
     });
@@ -366,5 +418,31 @@ router.put("/update-profile/:user_id", async (req, res) => {
     res.status(500).json({ message: "Error updating profile", error: error.message });
   }
 });
+router.post('/update-push-token', async (req, res) => {
+  try {
+    const { userId, token } = req.body;
+    
+    if (!userId || !token) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'User ID and token are required' 
+      });
+    }
 
+    // Update the user's expo push token in your database
+    const query = 'UPDATE users SET expo_push_token = ? WHERE user_id = ?';
+    await connection.query(query, [token, userId]);
+
+    res.json({ 
+      success: true, 
+      message: 'Push token updated successfully' 
+    });
+  } catch (error) {
+    console.error('Error updating push token:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: 'Failed to update push token' 
+    });
+  }
+});
 module.exports = router;

@@ -50,35 +50,46 @@ const messageOperation = {
     return new Promise((resolve, reject) => {
       const query = `
         SELECT 
-          c.chat_id,
-          c.customer_id,
-          c.provider_id,
-          cu.name as customer_name,
-          p.name as provider_name,
+          c.*,
+          u1.name as customer_name,
+          u2.name as provider_name,
           m.message_text as last_message,
-          m.sent_at as last_message_time
+          m.sent_at as last_message_time,
+          (
+            SELECT COUNT(*) 
+            FROM messages 
+            WHERE chat_id = c.chat_id 
+            AND receiver_id = ? 
+            AND is_read = 0
+          ) as unread_count,
+          (
+            SELECT message_text
+            FROM messages
+            WHERE chat_id = c.chat_id
+            ORDER BY sent_at DESC
+            LIMIT 1
+          ) as latest_message
         FROM chats c
-        LEFT JOIN users cu ON c.customer_id = cu.user_id
-        LEFT JOIN users p ON c.provider_id = p.user_id
-        LEFT JOIN (
-          SELECT chat_id, message_text, sent_at
-          FROM messages m1
-          WHERE sent_at = (
-            SELECT MAX(sent_at)
-            FROM messages m2
-            WHERE m1.chat_id = m2.chat_id
-          )
-        ) m ON c.chat_id = m.chat_id
+        LEFT JOIN users u1 ON c.customer_id = u1.user_id
+        LEFT JOIN users u2 ON c.provider_id = u2.user_id
+        LEFT JOIN messages m ON c.chat_id = m.chat_id
         WHERE c.customer_id = ? OR c.provider_id = ?
+        GROUP BY c.chat_id
         ORDER BY m.sent_at DESC`;
       
-      connection.query(query, [userId, userId], (err, results) => {
+      connection.query(query, [userId, userId, userId], (err, results) => {
         if (err) return reject(err);
-        resolve(results);
+        // Format the results
+        const formattedResults = results.map(chat => ({
+          ...chat,
+          unread_count: parseInt(chat.unread_count) || 0,
+          last_message: chat.latest_message || 'No messages yet'
+        }));
+        resolve(formattedResults);
       });
     });
   },
-
+  
   // Send a message
   sendMessage: (chatId, senderId, receiverId, messageText) => {
     const query = 'INSERT INTO messages (chat_id, sender_id, receiver_id, message_text, sent_at, is_read) VALUES (?, ?, ?, ?, NOW(), 0)';
@@ -107,9 +118,14 @@ const messageOperation = {
   getChatMessages: (chatId) => {
     return new Promise((resolve, reject) => {
       const query = `
-        SELECT m.*, 
-               u.name AS sender_name, 
-               u.profile_picture AS sender_profile_picture
+        SELECT 
+          m.*, 
+          u.name AS sender_name,
+          u.profile_picture AS sender_profile_picture,
+          CASE 
+            WHEN m.is_read = 0 THEN 'unread'
+            ELSE 'read'
+          END as status
         FROM messages m
         LEFT JOIN users u ON m.sender_id = u.user_id
         WHERE m.chat_id = ?
@@ -141,13 +157,13 @@ const messageOperation = {
   getUnreadCount: (userId) => {
     return new Promise((resolve, reject) => {
       const query = `
-        SELECT COUNT(*) as unread_count 
-        FROM messages 
+        SELECT COUNT(*) as total_unread
+        FROM messages
         WHERE receiver_id = ? AND is_read = 0
       `;
       connection.query(query, [userId], (err, results) => {
         if (err) return reject(err);
-        resolve(results[0].unread_count);
+        resolve(parseInt(results[0].total_unread) || 0);
       });
     });
   },
@@ -161,7 +177,41 @@ const messageOperation = {
         resolve(results);
       });
     });
-  }
+  },
+
+  // Mark single message as read
+  markMessageAsRead: (messageId, userId) => {
+    return new Promise((resolve, reject) => {
+      const query = `
+        UPDATE messages 
+        SET is_read = 1 
+        WHERE message_id = ? AND receiver_id = ?
+      `;
+      connection.query(query, [messageId, userId], (err, results) => {
+        if (err) return reject(err);
+        resolve(results);
+      });
+    });
+  },
+
+  // Get message by ID
+  getMessageById: (messageId) => {
+    return new Promise((resolve, reject) => {
+      const query = `
+        SELECT 
+          m.*, 
+          u.name AS sender_name,
+          u.profile_picture AS sender_profile_picture
+        FROM messages m
+        LEFT JOIN users u ON m.sender_id = u.user_id
+        WHERE m.message_id = ?
+      `;
+      connection.query(query, [messageId], (err, results) => {
+        if (err) return reject(err);
+        resolve(results[0] || null);
+      });
+    });
+  },
 };
 
 module.exports = messageOperation;

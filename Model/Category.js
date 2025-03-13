@@ -71,30 +71,37 @@ const categoryOperations = {
 
   
   // Read all services by category ID
-  getServicesByCategoryId: (categoryId) => {
-    return new Promise((resolve, reject) => {
-      const query = `
-        SELECT s.*, 
-               GROUP_CONCAT(si.image_url) as images
-        FROM Services s
-        LEFT JOIN ServiceImages si ON s.service_id = si.service_id
-        LEFT JOIN categories c ON s.category_id = c.category_id
-        LEFT JOIN users u ON s.provider_id = u.user_id
-        WHERE s.category_id = ?
-        GROUP BY s.service_id
-      `;
-      connection.query(query, [categoryId], (err, results) => {
-        if (err) reject(err);
-        else {
-          results = results.map(service => ({
-            ...service,
-            images: service.images ? service.images.split(',') : []
-          }));
-          resolve(results);
-        }
-      });
+  // Read all services by category ID
+getServicesByCategoryId: (categoryId) => {
+  return new Promise((resolve, reject) => {
+    const query = `
+      SELECT 
+        s.*, 
+        c.name AS category_name, 
+        GROUP_CONCAT(si.image_url) AS images, 
+        COUNT(r.review_id) AS review_count,  -- Number of reviews
+        IFNULL(AVG(r.rating), 0) AS average_rating  -- Average rating, defaults to 0 if no reviews
+      FROM services s
+      LEFT JOIN serviceimages si ON s.service_id = si.service_id
+      LEFT JOIN categories c ON s.category_id = c.category_id
+      LEFT JOIN users u ON s.provider_id = u.user_id
+      LEFT JOIN reviews r ON s.service_id = r.service_id  -- Join with reviews table
+      WHERE s.category_id = ?
+      GROUP BY s.service_id, c.name
+    `;
+    connection.query(query, [categoryId], (err, results) => {
+      if (err) reject(err);
+      else {
+        results = results.map(service => ({
+          ...service,
+          images: service.images ? service.images.split(',') : []
+        }));
+        resolve(results);
+      }
     });
-  },
+  });
+},
+
 
 };
 

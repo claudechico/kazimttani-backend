@@ -45,11 +45,16 @@ router.get('/chats/:chatId', async (req, res) => {
     }
 
     const messages = await messageOperation.getChatMessages(chatId);
+    // Transform messages to ensure is_read is either 1 or 0
+    const formattedMessages = messages.map(msg => ({
+      ...msg,
+      is_read: msg.is_read ? 1 : 0
+    }));
     
     res.json({
       success: true,
       chat,
-      messages
+      messages: formattedMessages
     });
   } catch (error) {
     res.status(500).json({
@@ -82,7 +87,7 @@ router.get('/user-chats/:userId', async (req, res) => {
 // Send a message
 router.post('/messages', async (req, res) => {
   try {
-    console.log('mzigo unaokuja kutoka front end ni',req.body)
+    // console.log('mzigo unaokuja kutoka front end ni',req.body)
     const { chat_id, sender_id, receiver_id, message_text } = req.body;
 
     if (!chat_id || !sender_id || !receiver_id || !message_text) {
@@ -113,9 +118,15 @@ router.get('/messages/:chatId', async (req, res) => {
     const chatId = req.params.chatId;
     const messages = await messageOperation.getChatMessages(chatId);
     
+    // Transform messages to ensure is_read is either 1 or 0
+    const formattedMessages = messages.map(msg => ({
+      ...msg,
+      is_read: msg.is_read ? 1 : 0
+    }));
+    
     res.json({
       success: true,
-      messages
+      messages: formattedMessages
     });
   } catch (error) {
     res.status(500).json({
@@ -154,8 +165,6 @@ router.put('/messages/read', async (req, res) => {
     });
   }
 });
-
-
 
 // Get unread message count
 router.get('/messages/unread/:userId', async (req, res) => {
@@ -198,6 +207,71 @@ router.delete('/messages/:messageId', async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Error deleting message',
+      error: error.message
+    });
+  }
+});
+
+// Mark message as read
+router.put('/messages/:messageId/read', async (req, res) => {
+  try {
+    const messageId = req.params.messageId;
+    const { userId } = req.body;
+
+    if (!userId) {
+      return res.status(400).json({
+        success: false,
+        message: 'User ID is required'
+      });
+    }
+
+    // Update message read status
+    await messageOperation.markMessageAsRead(messageId, userId);
+    
+    // Get updated message details
+    const message = await messageOperation.getMessageById(messageId);
+    
+    res.json({
+      success: true,
+      message: 'Message marked as read',
+      data: {
+        ...message,
+        is_read: 1
+      }
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'Error marking message as read',
+      error: error.message
+    });
+  }
+});
+
+// Get message read status
+router.get('/messages/:messageId/read-status', async (req, res) => {
+  try {
+    const messageId = req.params.messageId;
+    const message = await messageOperation.getMessageById(messageId);
+    
+    if (!message) {
+      return res.status(404).json({
+        success: false,
+        message: 'Message not found'
+      });
+    }
+
+    res.json({
+      success: true,
+      data: {
+        message_id: messageId,
+        is_read: message.is_read ? 1 : 0
+      }
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'Error fetching message read status',
       error: error.message
     });
   }
